@@ -7,6 +7,7 @@ package net.neoforged.fml.earlydisplay.render;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import net.neoforged.fml.earlydisplay.theme.Theme;
@@ -22,28 +23,15 @@ public record MaterializedTheme(
         Theme theme,
         @Nullable Path externalThemeDirectory,
         Map<String, SimpleFont> fonts,
-        Map<String, ElementShader> shaders,
-        MaterializedThemeSprites sprites) implements AutoCloseable {
+        Map<String, ThemeShader> shaders,
+        MaterializedThemeSprites sprites) {
     public static MaterializedTheme materialize(Theme theme, @Nullable Path externalThemeDirectory) {
         return new MaterializedTheme(
                 theme,
                 externalThemeDirectory,
                 loadFonts(theme.fonts(), externalThemeDirectory),
-                loadShaders(theme.shaders(), externalThemeDirectory),
+                Collections.unmodifiableMap(new HashMap<>(theme.shaders())),
                 loadSprites(theme.sprites(), externalThemeDirectory));
-    }
-
-    private static Map<String, ElementShader> loadShaders(Map<String, ThemeShader> themeShaders, @Nullable Path externalThemeDirectory) {
-        var shaders = new HashMap<String, ElementShader>(themeShaders.size());
-        for (var entry : themeShaders.entrySet()) {
-            var shader = ElementShader.create(
-                    entry.getKey(),
-                    entry.getValue().vertexShader(),
-                    entry.getValue().fragmentShader(),
-                    externalThemeDirectory);
-            shaders.put(entry.getKey(), shader);
-        }
-        return shaders;
     }
 
     private static Map<String, SimpleFont> loadFonts(Map<String, ThemeResource> themeFonts, @Nullable Path externalThemeDirectory) {
@@ -73,16 +61,11 @@ public record MaterializedTheme(
         return font;
     }
 
-    public ElementShader getShader(String shaderId) {
+    public ThemeShader getShader(String shaderId) {
         var shader = shaders.get(shaderId);
         if (shader == null) {
             throw new IllegalArgumentException("Missing shader definition in theme for " + shaderId);
         }
         return shader;
-    }
-
-    @Override
-    public void close() {
-        shaders.values().forEach(ElementShader::close);
     }
 }

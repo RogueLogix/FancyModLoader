@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only
  */
 
-package net.neoforged.fml.earlydisplay.render;
+package net.neoforged.fml.earlydisplay.render.opengl;
 
 import static org.lwjgl.opengl.GL32C.GL_ACTIVE_UNIFORMS;
 import static org.lwjgl.opengl.GL32C.GL_COMPILE_STATUS;
@@ -37,13 +37,14 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import net.neoforged.fml.earlydisplay.theme.ThemeResource;
+import net.neoforged.fml.earlydisplay.util.IntSize;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.PointerBuffer;
+import org.lwjgl.system.MemoryStack;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class ElementShader implements AutoCloseable {
-    public static final String UNIFORM_SCREEN_SIZE = "screenSize";
     public static final String UNIFORM_SAMPLER0 = "tex";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ElementShader.class);
@@ -58,28 +59,32 @@ public class ElementShader implements AutoCloseable {
         this.program = program;
         this.uniformLocations = uniformLocations;
     }
-
-    public static ElementShader create(String name, ThemeResource vertexShader, ThemeResource fragmentShader, @Nullable Path externalThemeDirectory) {
+    
+    public static ElementShader create(String name, IntSize layoutSize, ThemeResource vertexShader, ThemeResource fragmentShader, @Nullable Path externalThemeDirectory) {
         try (var vertexShaderBuffer = vertexShader.toNativeBuffer(externalThemeDirectory);
                 var fragmentShaderBuffer = fragmentShader.toNativeBuffer(externalThemeDirectory)) {
-            return create(name, vertexShaderBuffer.buffer(), fragmentShaderBuffer.buffer());
+            return create(name, layoutSize, vertexShaderBuffer.buffer(), fragmentShaderBuffer.buffer());
         } catch (IOException e) {
             throw new RuntimeException("Failed to read shaders for " + name);
         }
     }
-
-    public static ElementShader create(String name, ByteBuffer vertexShaderSource, ByteBuffer fragmentShaderSource) {
+    
+    public static ElementShader create(String name, IntSize layoutSize, ByteBuffer vertexShaderSource, ByteBuffer fragmentShaderSource) {
         int vertexShader = glCreateShader(GL_VERTEX_SHADER);
         GlDebug.labelShader(vertexShader, "FML " + name + ".vert");
         int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
         GlDebug.labelShader(fragmentShader, "FML " + name + ".frag");
 
         // Bind the source of our shaders to the ones created above
-        var sourcePointers = PointerBuffer.allocateDirect(1);
-        sourcePointers.put(0, fragmentShaderSource);
-        glShaderSource(fragmentShader, sourcePointers, new int[] { fragmentShaderSource.remaining() });
-        sourcePointers.put(0, vertexShaderSource);
-        glShaderSource(vertexShader, sourcePointers, new int[] { vertexShaderSource.remaining() });
+        final var layoutSizeDefineString = "#version 150 core\n#define FML_SCREEN_SIZE vec2(%d, %d)\n//".formatted(layoutSize.width(), layoutSize.height());
+        try (final var stack = MemoryStack.stackPush()) {
+            var sourcePointers = PointerBuffer.allocateDirect(2);
+            sourcePointers.put(0, stack.ASCII(layoutSizeDefineString));
+            sourcePointers.put(1, fragmentShaderSource);
+            glShaderSource(fragmentShader, sourcePointers, new int[]{layoutSizeDefineString.length(), fragmentShaderSource.remaining()});
+            sourcePointers.put(1, vertexShaderSource);
+            glShaderSource(vertexShader, sourcePointers, new int[]{layoutSizeDefineString.length(), vertexShaderSource.remaining()});
+        }
 
         // Compile the vertex and fragment elementShader so that we can use them
         glCompileShader(vertexShader);

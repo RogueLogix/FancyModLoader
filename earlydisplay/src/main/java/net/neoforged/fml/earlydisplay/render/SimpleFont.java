@@ -5,19 +5,6 @@
 
 package net.neoforged.fml.earlydisplay.render;
 
-import static org.lwjgl.opengl.GL11C.GL_NEAREST;
-import static org.lwjgl.opengl.GL32C.GL_CLAMP_TO_EDGE;
-import static org.lwjgl.opengl.GL32C.GL_RED;
-import static org.lwjgl.opengl.GL32C.GL_TEXTURE0;
-import static org.lwjgl.opengl.GL32C.GL_TEXTURE_2D;
-import static org.lwjgl.opengl.GL32C.GL_TEXTURE_MAG_FILTER;
-import static org.lwjgl.opengl.GL32C.GL_TEXTURE_MIN_FILTER;
-import static org.lwjgl.opengl.GL32C.GL_TEXTURE_WRAP_S;
-import static org.lwjgl.opengl.GL32C.GL_TEXTURE_WRAP_T;
-import static org.lwjgl.opengl.GL32C.GL_UNSIGNED_BYTE;
-import static org.lwjgl.opengl.GL32C.glGenTextures;
-import static org.lwjgl.opengl.GL32C.glTexImage2D;
-import static org.lwjgl.opengl.GL32C.glTexParameteri;
 import static org.lwjgl.stb.STBTruetype.stbtt_GetPackedQuad;
 import static org.lwjgl.stb.STBTruetype.stbtt_GetScaledFontVMetrics;
 import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
@@ -31,11 +18,13 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import net.neoforged.fml.earlydisplay.theme.NativeBuffer;
+import net.neoforged.fml.earlydisplay.theme.TextureScaling;
 import net.neoforged.fml.earlydisplay.theme.ThemeResource;
+import net.neoforged.fml.earlydisplay.theme.UncompressedImage;
 import net.neoforged.fml.earlydisplay.util.Size;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
-import org.lwjgl.opengl.GL32C;
 import org.lwjgl.stb.STBTTAlignedQuad;
 import org.lwjgl.stb.STBTTFontinfo;
 import org.lwjgl.stb.STBTTPackContext;
@@ -43,7 +32,7 @@ import org.lwjgl.stb.STBTTPackRange;
 import org.lwjgl.stb.STBTTPackedchar;
 
 public class SimpleFont implements AutoCloseable {
-    private int textureId;
+    private Texture texture;
     private final int lineSpacing;
     private final int descent;
     private final int GLYPH_COUNT = 127 - 32;
@@ -84,10 +73,7 @@ public class SimpleFont implements AutoCloseable {
 
     @Override
     public void close() {
-        if (textureId != 0) {
-            GL32C.glDeleteTextures(textureId);
-            textureId = 0;
-        }
+        texture.close();
     }
 
     private record Glyph(char c, int charwidth, int[] pos, float[] uv) {
@@ -122,10 +108,7 @@ public class SimpleFont implements AutoCloseable {
             stbtt_GetScaledFontVMetrics(buf, 0, fontSize, ascent, descent, lineGap);
             this.lineSpacing = (int) (ascent[0] - descent[0] + lineGap[0]);
             this.descent = (int) Math.floor(descent[0]);
-            this.textureId = glGenTextures();
-            GlState.activeTexture(GL_TEXTURE0);
-            GlState.bindTexture2D(this.textureId);
-            GlDebug.labelTexture(this.textureId, "font texture " + resource);
+
             try (var packedchars = STBTTPackedchar.malloc(GLYPH_COUNT)) {
                 int texwidth = 256;
                 int texheight = 128;
@@ -142,11 +125,9 @@ public class SimpleFont implements AutoCloseable {
                         stbtt_PackSetSkipMissingCodepoints(pc, true);
                         stbtt_PackFontRanges(pc, buf, 0, packRanges);
                         stbtt_PackEnd(pc);
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, texwidth, texheight, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
-                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+                        final var image = new UncompressedImage("font texture " + resource, null, new NativeBuffer(bitmap, null), texwidth, texheight, false);
+                        this.texture = Texture.create(image, "font texture " + resource, new TextureScaling.Stretch(texwidth, texheight, false), null);
                     }
                 }
                 try (var q = STBTTAlignedQuad.malloc()) {
@@ -169,8 +150,8 @@ public class SimpleFont implements AutoCloseable {
         return lineSpacing;
     }
 
-    int textureId() {
-        return textureId;
+    Texture texture() {
+        return texture;
     }
 
     public int descent() {

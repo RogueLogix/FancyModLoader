@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only
  */
 
-package net.neoforged.fml.earlydisplay.render;
+package net.neoforged.fml.earlydisplay.render.opengl;
 
 import static org.lwjgl.opengl.GL11C.GL_SCISSOR_BOX;
 import static org.lwjgl.opengl.GL11C.GL_SCISSOR_TEST;

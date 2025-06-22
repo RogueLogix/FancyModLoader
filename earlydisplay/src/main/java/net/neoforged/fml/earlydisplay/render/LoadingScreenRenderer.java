@@ -5,23 +5,6 @@
 
 package net.neoforged.fml.earlydisplay.render;
 
-import static org.lwjgl.glfw.GLFW.glfwGetFramebufferSize;
-import static org.lwjgl.glfw.GLFW.glfwMakeContextCurrent;
-import static org.lwjgl.glfw.GLFW.glfwSwapBuffers;
-import static org.lwjgl.glfw.GLFW.glfwSwapInterval;
-import static org.lwjgl.opengl.GL.createCapabilities;
-import static org.lwjgl.opengl.GL11C.GL_COLOR_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11C.GL_DEPTH_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11C.GL_ONE;
-import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
-import static org.lwjgl.opengl.GL11C.GL_RENDERER;
-import static org.lwjgl.opengl.GL11C.GL_SRC_ALPHA;
-import static org.lwjgl.opengl.GL11C.GL_VENDOR;
-import static org.lwjgl.opengl.GL11C.GL_VERSION;
-import static org.lwjgl.opengl.GL11C.GL_ZERO;
-import static org.lwjgl.opengl.GL11C.glClear;
-import static org.lwjgl.opengl.GL11C.glGetString;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,10 +25,8 @@ import net.neoforged.fml.earlydisplay.theme.Theme;
 import net.neoforged.fml.earlydisplay.theme.elements.ThemeElement;
 import net.neoforged.fml.earlydisplay.theme.elements.ThemeImageElement;
 import net.neoforged.fml.earlydisplay.theme.elements.ThemeLabelElement;
+import net.neoforged.fml.earlydisplay.util.IntSize;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
-import org.lwjgl.opengl.GL;
-import org.lwjgl.opengl.GL32C;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +35,7 @@ public class LoadingScreenRenderer implements AutoCloseable {
     public static final int LAYOUT_WIDTH = 854;
     public static final int LAYOUT_HEIGHT = 480;
 
-    private final long glfwWindow;
+    private final APIWindow apiWindow;
     private final MaterializedTheme theme;
     private final String mcVersion;
     private final String neoForgeVersion;
@@ -63,8 +44,6 @@ public class LoadingScreenRenderer implements AutoCloseable {
 
     private int animationFrame;
     private long nextFrameTime = 0;
-
-    private final EarlyFramebuffer framebuffer;
 
     private final Semaphore renderLock = new Semaphore(1);
 
@@ -82,39 +61,19 @@ public class LoadingScreenRenderer implements AutoCloseable {
      * Nothing fancy, we just want to draw and render text.
      */
     public LoadingScreenRenderer(ScheduledExecutorService scheduler,
-            long glfwWindow,
+            APIWindow apiWindow,
             Theme theme,
             @Nullable Path externalThemeDirectory,
             String mcVersion,
             String neoForgeVersion) {
-        this.glfwWindow = glfwWindow;
+        this.apiWindow = apiWindow;
         this.mcVersion = mcVersion;
         this.neoForgeVersion = neoForgeVersion;
-
-        // This thread owns the GL render context now. We should make a note of that.
-        glfwMakeContextCurrent(glfwWindow);
-        // Wait for one frame to be complete before swapping; enable vsync in other words.
-        glfwSwapInterval(1);
-        var capabilities = createCapabilities();
-        GlState.readFromOpenGL();
-        GlDebug.setCapabilities(capabilities);
-        LOGGER.info("GL info: {} GL version {}, {}", glGetString(GL_RENDERER), glGetString(GL_VERSION), glGetString(GL_VENDOR));
 
         // Create GL resources
         this.theme = MaterializedTheme.materialize(theme, externalThemeDirectory);
         this.elements = loadElements();
 
-        // we always render to an 854x480 texture and then fit that to the screen
-        framebuffer = new EarlyFramebuffer(LAYOUT_WIDTH, LAYOUT_HEIGHT);
-
-        // Set the clear color based on the colour scheme
-        var background = theme.colorScheme().screenBackground();
-        GlState.clearColor(background.r(), background.g(), background.b(), 1f);
-        GL32C.glClear(GL_COLOR_BUFFER_BIT);
-
-        GlState.enableBlend(true);
-        GlState.blendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glfwMakeContextCurrent(0);
         this.automaticRendering = scheduler.scheduleWithFixedDelay(this::renderToScreen, 50, 50, TimeUnit.MILLISECONDS);
         // schedule a 50 ms ticker to try and smooth out the rendering
         scheduler.scheduleWithFixedDelay(() -> animationFrame++, 1, 50, TimeUnit.MILLISECONDS);
@@ -191,108 +150,51 @@ public class LoadingScreenRenderer implements AutoCloseable {
                 return;
             }
             nextFrameTime = nt + MINFRAMETIME;
-            glfwMakeContextCurrent(glfwWindow);
-
-            GlState.readFromOpenGL();
-            var backup = GlState.createSnapshot();
-
-            int[] w = new int[1];
-            int[] h = new int[1];
-            glfwGetFramebufferSize(glfwWindow, w, h);
-            framebuffer.resize(w[0], h[0]);
-
-            renderToFramebuffer();
-
-            GlState.viewport(0, 0, w[0], h[0]);
-            framebuffer.blitToScreen(this.theme.theme().colorScheme().screenBackground(), w[0], h[0]);
-            // Swap buffers; we're done
-            glfwSwapBuffers(glfwWindow);
-
-            GlState.applySnapshot(backup);
+            apiWindow.doDraw(this::renderToFramebuffer, automaticRendering != null);
         } catch (Throwable t) {
             LOGGER.error("Unexpected error while rendering the loading screen", t);
         } finally {
-            if (this.automaticRendering != null)
-                glfwMakeContextCurrent(0); // we release the gl context IF we're running off the main thread
             renderLock.release();
         }
     }
 
-    public void renderToFramebuffer() {
-        GlDebug.pushGroup("update EarlyDisplay framebuffer");
-        GlState.readFromOpenGL();
-        var backup = GlState.createSnapshot();
+    public void renderToFramebuffer(APIRenderer renderer) {
+        renderer.pushDebugGroup("update EarlyDisplay framebuffer");
 
-        framebuffer.activate();
+        final var framebufferSize = renderer.framebufferSize();
 
         // Fit the layout rectangle into the screen while maintaining aspect ratio
         var desiredAspectRatio = LAYOUT_WIDTH / (float) LAYOUT_HEIGHT;
-        var actualAspectRatio = framebuffer.width() / (float) framebuffer.height();
+        var actualAspectRatio = framebufferSize.width() / (float) framebufferSize.height();
         if (actualAspectRatio > desiredAspectRatio) {
             // This means we are wider than the desired aspect ratio, and have to center horizontally
-            var actualWidth = desiredAspectRatio * framebuffer.height();
-            GlState.viewport((int) (framebuffer.width() - actualWidth) / 2, 0, (int) actualWidth, framebuffer.height());
+            var actualWidth = desiredAspectRatio * framebufferSize.height();
+            renderer.setViewport((int) (framebufferSize.width() - actualWidth) / 2, 0, (int) actualWidth, framebufferSize.height());
         } else {
             // This means we are taller than the desired aspect ratio, and have to center vertically
-            var actualHeight = framebuffer.width() / desiredAspectRatio;
-            GlState.viewport(0, (int) (framebuffer.height() - actualHeight) / 2, framebuffer.width(), (int) actualHeight);
+            var actualHeight = framebufferSize.width() / desiredAspectRatio;
+            renderer.setViewport(0, (int) (framebufferSize.height() - actualHeight) / 2, framebufferSize.width(), (int) actualHeight);
         }
 
-        // Clear the screen to our color
-        var background = theme.theme().colorScheme().screenBackground();
-        GlState.clearColor(background.r(), background.g(), background.b(), 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        GlState.enableBlend(true);
-        GlState.blendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+        renderer.beginDrawing(theme);
 
-        for (var shader : theme.shaders().values()) {
-            shader.activate();
-            if (shader.hasUniform(ElementShader.UNIFORM_SCREEN_SIZE)) {
-                shader.setUniform2f(ElementShader.UNIFORM_SCREEN_SIZE, LAYOUT_WIDTH, LAYOUT_HEIGHT);
-            }
-        }
+        renderer.setLayoutSize(new IntSize(LAYOUT_WIDTH, LAYOUT_HEIGHT));
 
-        var context = new RenderContext(buffer, theme, LAYOUT_WIDTH, LAYOUT_HEIGHT, animationFrame);
+        var context = new RenderContext(renderer, buffer, theme, LAYOUT_WIDTH, LAYOUT_HEIGHT, animationFrame);
 
         for (var element : this.elements) {
             element.render(context);
         }
 
-        framebuffer.deactivate();
-
-        GlState.applySnapshot(backup);
-        GlDebug.popGroup();
+        renderer.endDrawing();
+        renderer.popDebugGroup();
     }
 
     @Override
     public void close() {
-        var previousContext = GLFW.glfwGetCurrentContext();
-        var previousCaps = GL.getCapabilities();
-
-        boolean needsToRestoreContext = false;
-        if (previousContext != glfwWindow) {
-            GLFW.glfwMakeContextCurrent(glfwWindow);
-            GL.createCapabilities();
-            needsToRestoreContext = true;
+        for (var element : elements) {
+            element.close();
         }
-
-        try {
-            theme.close();
-            for (var element : elements) {
-                element.close();
-            }
-            framebuffer.close();
-            buffer.close();
-            SimpleBufferBuilder.destroy();
-        } finally {
-            if (needsToRestoreContext) {
-                GLFW.glfwMakeContextCurrent(previousContext);
-                GL.setCapabilities(previousCaps);
-            }
-        }
-    }
-
-    public int getFramebufferTextureId() {
-        return framebuffer.getTexture();
+        buffer.close();
     }
 }

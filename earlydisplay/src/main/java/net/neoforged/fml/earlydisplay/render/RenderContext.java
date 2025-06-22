@@ -5,25 +5,18 @@
 
 package net.neoforged.fml.earlydisplay.render;
 
-import static org.lwjgl.opengl.GL13C.GL_TEXTURE0;
-
 import java.util.List;
 import net.neoforged.fml.earlydisplay.theme.Theme;
 import net.neoforged.fml.earlydisplay.theme.ThemeColor;
 import net.neoforged.fml.earlydisplay.util.Bounds;
 
 public record RenderContext(
+        APIRenderer apiRenderer,
         SimpleBufferBuilder sharedBuffer,
         MaterializedTheme theme,
         float availableWidth,
         float availableHeight,
         int animationFrame) {
-    public ElementShader bindShader(String shaderId) {
-        var shader = theme.getShader(shaderId);
-        shader.activate();
-        return shader;
-    }
-
     public void blitTexture(Texture texture, Bounds bounds) {
         blitTexture(texture, bounds, -1);
     }
@@ -50,12 +43,6 @@ public record RenderContext(
             float u1,
             float v0,
             float v1) {
-        GlState.activeTexture(GL_TEXTURE0);
-        GlState.bindTexture2D(texture.textureId());
-
-        var shader = bindShader(Theme.SHADER_GUI);
-        shader.setUniform1i(ElementShader.UNIFORM_SAMPLER0, 0);
-
         sharedBuffer.begin(SimpleBufferBuilder.Format.POS_TEX_COLOR, SimpleBufferBuilder.Mode.QUADS);
 
         QuadHelper.fillSprite(
@@ -74,16 +61,13 @@ public record RenderContext(
                 v0,
                 v1);
 
-        sharedBuffer.draw();
+        apiRenderer.draw(sharedBuffer, Theme.SHADER_GUI, texture);
     }
 
     public void renderText(float x, float y, SimpleFont font, List<SimpleFont.DisplayText> texts) {
-        GlState.activeTexture(GL_TEXTURE0);
-        GlState.bindTexture2D(font.textureId());
-        bindShader(Theme.SHADER_FONT);
         sharedBuffer.begin(SimpleBufferBuilder.Format.POS_TEX_COLOR, SimpleBufferBuilder.Mode.QUADS);
         font.generateVerticesForTexts(x, y, sharedBuffer, texts);
-        sharedBuffer.draw();
+        apiRenderer.draw(sharedBuffer, Theme.SHADER_FONT, font.texture());
     }
 
     public void renderIndeterminateProgressBar(Bounds backgroundBounds) {
@@ -134,13 +118,12 @@ public record RenderContext(
 
         blitTexture(sprites.progressBarBackground(), barBounds);
 
-        GlState.scissorTest(true);
-        GlState.scissorBox(
+        apiRenderer.setScissor(true,
                 (int) barBounds.left(),
                 (int) barBounds.top(),
                 (int) (barBounds.width() * fillFactor),
                 (int) barBounds.height());
         blitTexture(sprites.progressBarForeground(), barBounds, foregroundColor);
-        GlState.scissorTest(false);
+        apiRenderer.setScissor(false, 0, 0, 0, 0);
     }
 }

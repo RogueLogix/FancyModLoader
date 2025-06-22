@@ -5,24 +5,13 @@
 
 package net.neoforged.fml.earlydisplay;
 
-import static org.lwjgl.glfw.GLFW.GLFW_CLIENT_API;
-import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_CREATION_API;
-import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MAJOR;
-import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MINOR;
 import static org.lwjgl.glfw.GLFW.GLFW_FALSE;
-import static org.lwjgl.glfw.GLFW.GLFW_NATIVE_CONTEXT_API;
 import static org.lwjgl.glfw.GLFW.GLFW_NO_ERROR;
-import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_API;
-import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_CORE_PROFILE;
-import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_DEBUG_CONTEXT;
-import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_FORWARD_COMPAT;
-import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_PROFILE;
 import static org.lwjgl.glfw.GLFW.GLFW_RESIZABLE;
 import static org.lwjgl.glfw.GLFW.GLFW_TRUE;
 import static org.lwjgl.glfw.GLFW.GLFW_VISIBLE;
 import static org.lwjgl.glfw.GLFW.GLFW_X11_CLASS_NAME;
 import static org.lwjgl.glfw.GLFW.GLFW_X11_INSTANCE_NAME;
-import static org.lwjgl.glfw.GLFW.glfwCreateWindow;
 import static org.lwjgl.glfw.GLFW.glfwDefaultWindowHints;
 import static org.lwjgl.glfw.GLFW.glfwGetError;
 import static org.lwjgl.glfw.GLFW.glfwGetMonitorPos;
@@ -30,17 +19,14 @@ import static org.lwjgl.glfw.GLFW.glfwGetPrimaryMonitor;
 import static org.lwjgl.glfw.GLFW.glfwGetVideoMode;
 import static org.lwjgl.glfw.GLFW.glfwGetWindowSize;
 import static org.lwjgl.glfw.GLFW.glfwInit;
-import static org.lwjgl.glfw.GLFW.glfwMakeContextCurrent;
 import static org.lwjgl.glfw.GLFW.glfwMaximizeWindow;
 import static org.lwjgl.glfw.GLFW.glfwPollEvents;
 import static org.lwjgl.glfw.GLFW.glfwSetWindowIcon;
 import static org.lwjgl.glfw.GLFW.glfwSetWindowPos;
 import static org.lwjgl.glfw.GLFW.glfwSetWindowSizeCallback;
 import static org.lwjgl.glfw.GLFW.glfwShowWindow;
-import static org.lwjgl.glfw.GLFW.glfwSwapInterval;
 import static org.lwjgl.glfw.GLFW.glfwWindowHint;
 import static org.lwjgl.glfw.GLFW.glfwWindowHintString;
-import static org.lwjgl.opengl.GL32C.GL_TRUE;
 
 import java.awt.Desktop;
 import java.io.IOException;
@@ -65,8 +51,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import joptsimple.OptionParser;
+import net.neoforged.fml.earlydisplay.render.APIRenderer;
+import net.neoforged.fml.earlydisplay.render.APIWindow;
 import net.neoforged.fml.earlydisplay.render.LoadingScreenRenderer;
 import net.neoforged.fml.earlydisplay.render.SimpleFont;
+import net.neoforged.fml.earlydisplay.render.opengl.GlWindow;
 import net.neoforged.fml.earlydisplay.theme.Theme;
 import net.neoforged.fml.earlydisplay.theme.ThemeIds;
 import net.neoforged.fml.earlydisplay.theme.ThemeLoader;
@@ -108,8 +97,7 @@ public class DisplayWindow implements ImmediateWindowProvider {
 
     private ScheduledFuture<LoadingScreenRenderer> rendererFuture;
 
-    // The GL ID of the window. Used for all operations
-    private long window;
+    private APIWindow window;
     // The thread that contains and ticks the window while Forge is loading mods
     private ScheduledExecutorService renderScheduler;
     private int winWidth;
@@ -233,9 +221,9 @@ public class DisplayWindow implements ImmediateWindowProvider {
     }
 
     // Called from NeoForge
-    public void renderToFramebuffer() {
+    public void renderToFramebuffer(APIRenderer apiRenderer) {
         if (rendererFuture.isDone()) {
-            rendererFuture.resultNow().renderToFramebuffer();
+            rendererFuture.resultNow().renderToFramebuffer(apiRenderer);
         }
     }
 
@@ -305,12 +293,7 @@ public class DisplayWindow implements ImmediateWindowProvider {
         // Set window hints for the new window we're gonna create.
         // Start of flags copied from Vanilla Minecraft
         glfwDefaultWindowHints();
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-        glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+
         // End of flags copied from Vanilla Minecraft
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -321,10 +304,6 @@ public class DisplayWindow implements ImmediateWindowProvider {
             String vanillaWindowTitle = "Minecraft* " + mcVersion;
             glfwWindowHintString(GLFW_X11_CLASS_NAME, vanillaWindowTitle);
             glfwWindowHintString(GLFW_X11_INSTANCE_NAME, vanillaWindowTitle);
-        }
-        if (FMLConfig.getBoolConfigValue(FMLConfig.ConfigValue.DEBUG_OPENGL)) {
-            LOGGER.info("Requesting the creation of an OpenGL debug context");
-            glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
         }
 
         long primaryMonitor = glfwGetPrimaryMonitor();
@@ -346,9 +325,10 @@ public class DisplayWindow implements ImmediateWindowProvider {
             if (!successfulWindow.get()) crashElegantly("Timed out trying to setup the Game Window.");
         }, 30, TimeUnit.SECONDS);
 
-        this.window = glfwCreateWindow(winWidth, winHeight, "Minecraft: NeoForge Loading...", 0L, 0L);
-        var creationError = getLastGlfwError().orElse("unknown error");
-        if (this.window == 0L) {
+        try {
+            this.window = new GlWindow(winWidth, winHeight, "Minecraft: NeoForge Loading...");
+        } catch (IllegalStateException ignored) {
+            var creationError = getLastGlfwError().orElse("unknown error");
             LOGGER.error("Failed to create window: {}", creationError);
 
             crashElegantly("Failed to create a window:\n" + creationError);
@@ -366,14 +346,14 @@ public class DisplayWindow implements ImmediateWindowProvider {
         int monitorY = y[0];
 //        glfwSetWindowSizeLimits(window, 854, 480, GLFW_DONT_CARE, GLFW_DONT_CARE);
         if (this.maximized) {
-            glfwMaximizeWindow(window);
+            glfwMaximizeWindow(window.windowHandle());
         }
 
-        glfwGetWindowSize(window, x, y);
+        glfwGetWindowSize(window.windowHandle(), x, y);
         this.winWidth = x[0];
         this.winHeight = y[0];
 
-        glfwSetWindowPos(window, (vidmode.width() - this.winWidth) / 2 + monitorX, (vidmode.height() - this.winHeight) / 2 + monitorY);
+        glfwSetWindowPos(window.windowHandle(), (vidmode.width() - this.winWidth) / 2 + monitorX, (vidmode.height() - this.winHeight) / 2 + monitorY);
 
         // Attempt setting the icon
         try (var glfwImgBuffer = GLFWImage.malloc(1);
@@ -381,22 +361,22 @@ public class DisplayWindow implements ImmediateWindowProvider {
                 var icon = theme.windowIcon().loadAsImage(getThemePath())) {
             glfwImgBuffer.put(glfwImages.set(icon.width(), icon.height(), icon.imageData()));
             glfwImgBuffer.flip();
-            glfwSetWindowIcon(window, glfwImgBuffer);
+            glfwSetWindowIcon(window.windowHandle(), glfwImgBuffer);
         } catch (Exception e) {
             LOGGER.error("Failed to load NeoForged icon", e);
         }
         getLastGlfwError().ifPresent(error -> LOGGER.warn("Failed to set window icon: {}", error));
 
-        glfwSetWindowSizeCallback(window, this::winResize);
+        glfwSetWindowSizeCallback(window.windowHandle(), this::winResize);
 
         // Show the window
-        glfwShowWindow(window);
+        glfwShowWindow(window.windowHandle());
         getLastGlfwError().ifPresent(error -> LOGGER.warn("Failed to show and position window: {}", error));
         glfwPollEvents();
     }
 
     private void winResize(long window, int width, int height) {
-        if (window == this.window && width != 0 && height != 0) {
+        if (window == this.window.windowHandle() && width != 0 && height != 0) {
             this.winWidth = width;
             this.winHeight = height;
         }
@@ -446,32 +426,18 @@ public class DisplayWindow implements ImmediateWindowProvider {
             renderer.stopAutomaticRendering();
         } catch (TimeoutException e) {
             dumpBackgroundThreadStack();
-            crashElegantly("Cannot hand over rendering to Minecraft! The background loading screen renderer seems stuck.");
+            crashElegantly("Cannot hand over rendering to Minecraft! The background loading screen apiRenderer seems stuck.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
         completeProgress();
 
-        glfwMakeContextCurrent(window);
-        // Set the title to what the game wants
-        glfwSwapInterval(0);
+        window.close();
         // Clean up our hooks
-        glfwSetWindowSizeCallback(window, null).close();
+        glfwSetWindowSizeCallback(window.windowHandle(), null).close();
         this.repaintTick = renderer::renderToScreen; // the repaint will continue to be called until the overlay takes over
-        return window;
-    }
-
-    /**
-     * <strong>Called from Neo</strong>
-     * 
-     * @return The OpenGL texture id of the texture the early loading screen is being rendered into.
-     */
-    public int getFramebufferTextureId() {
-        if (!rendererFuture.isDone()) {
-            throw new IllegalStateException("Initialization of the renderer has not completed yet.");
-        }
-        return rendererFuture.resultNow().getFramebufferTextureId();
+        return window.windowHandle();
     }
 
     @Override
@@ -504,7 +470,7 @@ public class DisplayWindow implements ImmediateWindowProvider {
             try {
                 rendererFuture.get().close();
             } catch (ExecutionException e) {
-                LOGGER.error("Cannot close renderer since it failed to initialize", e);
+                LOGGER.error("Cannot close apiRenderer since it failed to initialize", e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // Re-interrupt and continue closing
             }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only
  */
 
-package net.neoforged.fml.earlydisplay.render;
+package net.neoforged.fml.earlydisplay.render.opengl;
 
 import static org.lwjgl.opengl.GL32C.GL_COLOR_ATTACHMENT0;
 import static org.lwjgl.opengl.GL32C.GL_COLOR_BUFFER_BIT;

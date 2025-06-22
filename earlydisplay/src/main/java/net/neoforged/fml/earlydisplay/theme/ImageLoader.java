@@ -74,7 +74,8 @@ public final class ImageLoader {
                     source,
                     new NativeBuffer(decodedImage, STBImage::stbi_image_free),
                     width[0],
-                    height[0]));
+                    height[0],
+                    true));
         } catch (Exception e) {
             return new Result.Error(e);
         }
@@ -121,7 +122,8 @@ public final class ImageLoader {
                 null,
                 nativeBuffer,
                 BROKEN_TEXTURE_DIMENSIONS,
-                BROKEN_TEXTURE_DIMENSIONS);
+                BROKEN_TEXTURE_DIMENSIONS, 
+                true);
     }
 
     private ImageLoader() {}

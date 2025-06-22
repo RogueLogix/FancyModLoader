@@ -16,7 +16,8 @@ public record UncompressedImage(
         @Nullable ThemeResource source,
         NativeBuffer nativeImageData,
         int width,
-        int height) implements AutoCloseable {
+        int height,
+        boolean rgba) implements AutoCloseable {
     public ByteBuffer imageData() {
         return nativeImageData.buffer();
     }
