@@ -6,12 +6,14 @@
 package net.neoforged.fml.earlydisplay.render;
 
 import java.nio.file.Path;
-
-import net.neoforged.fml.earlydisplay.theme.*;
+import net.neoforged.fml.earlydisplay.theme.AnimationMetadata;
+import net.neoforged.fml.earlydisplay.theme.TextureScaling;
+import net.neoforged.fml.earlydisplay.theme.ThemeTexture;
+import net.neoforged.fml.earlydisplay.theme.UncompressedImage;
 import org.jetbrains.annotations.Nullable;
 
 public record Texture(UncompressedImage textureData, String debugName,
-                      int physicalWidth, int physicalHeight,
+        int physicalWidth, int physicalHeight,
         TextureScaling scaling,
         @Nullable AnimationMetadata animationMetadata) implements AutoCloseable {
     public int width() {
@@ -33,7 +35,7 @@ public record Texture(UncompressedImage textureData, String debugName,
             @Nullable AnimationMetadata animation) {
         return new Texture(image, debugName, image.width(), image.height(), scaling, animation);
     }
-    
+
     @Override
     public void close() {
         textureData.close();

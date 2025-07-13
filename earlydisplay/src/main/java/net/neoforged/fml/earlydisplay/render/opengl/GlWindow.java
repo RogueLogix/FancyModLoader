@@ -23,7 +23,14 @@ import static org.lwjgl.glfw.GLFW.glfwMakeContextCurrent;
 import static org.lwjgl.glfw.GLFW.glfwSwapBuffers;
 import static org.lwjgl.glfw.GLFW.glfwSwapInterval;
 import static org.lwjgl.glfw.GLFW.glfwWindowHint;
-import static org.lwjgl.opengl.GL11C.*;
+import static org.lwjgl.opengl.GL11C.GL_COLOR_BUFFER_BIT;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_BUFFER_BIT;
+import static org.lwjgl.opengl.GL11C.GL_ONE;
+import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11C.GL_RED;
+import static org.lwjgl.opengl.GL11C.GL_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11C.GL_ZERO;
+import static org.lwjgl.opengl.GL11C.glClear;
 import static org.lwjgl.opengl.GL32C.GL_ARRAY_BUFFER;
 import static org.lwjgl.opengl.GL32C.GL_CLAMP_TO_EDGE;
 import static org.lwjgl.opengl.GL32C.GL_DYNAMIC_DRAW;
@@ -260,7 +267,7 @@ public class GlWindow implements APIWindow, APIRenderer {
             builder.reset();
             return;
         }
-        
+
         GlState.bindArrayBuffer(vertexBuffer);
         glBufferData(GL_ARRAY_BUFFER, builder.vertexBuffer(), GL_DYNAMIC_DRAW);
 
