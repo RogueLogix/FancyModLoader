@@ -122,7 +122,7 @@ public final class ImageLoader {
                 null,
                 nativeBuffer,
                 BROKEN_TEXTURE_DIMENSIONS,
-                BROKEN_TEXTURE_DIMENSIONS, 
+                BROKEN_TEXTURE_DIMENSIONS,
                 true);
     }
 

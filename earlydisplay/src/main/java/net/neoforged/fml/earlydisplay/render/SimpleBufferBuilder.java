@@ -91,7 +91,7 @@ public class SimpleBufferBuilder implements Closeable {
             quadsElementBuffer.putInt(i * 4 + 0).putInt(i * 4 + 1).putInt(i * 4 + 2);
             quadsElementBuffer.putInt(i * 4 + 1).putInt(i * 4 + 3).putInt(i * 4 + 2);
         }
-        
+
         quadsElementBuffer.flip();
     }
 
@@ -102,7 +102,6 @@ public class SimpleBufferBuilder implements Closeable {
      * @param format The format to start building in.
      * @param mode   The mode to start building in.
      */
-    Exception lastBegan;
     public SimpleBufferBuilder begin(Format format, Mode mode) {
         if (bufferAddr == MemoryUtil.NULL) {
             throw new IllegalStateException("Buffer has been freed."); // You already free'd the buffer
@@ -116,7 +115,6 @@ public class SimpleBufferBuilder implements Closeable {
         this.format = format;
         this.mode = mode;
         building = true;
-        lastBegan = new Exception();
         elementIndex = 0;
         ensureSpace(format.stride);
         // Rewind ready for new data.
@@ -252,7 +250,7 @@ public class SimpleBufferBuilder implements Closeable {
             buffer.rewind();
         }
     }
-    
+
     public void finish() {
         if (!building) throw new IllegalStateException("Not building.");
         building = false;
@@ -264,7 +262,7 @@ public class SimpleBufferBuilder implements Closeable {
 
         buffer.position(0);
         buffer.limit(index);
-        
+
         if (mode == Mode.QUADS) {
             ensureElementBufferLength(vertices);
         }

@@ -59,7 +59,7 @@ public class ElementShader implements AutoCloseable {
         this.program = program;
         this.uniformLocations = uniformLocations;
     }
-    
+
     public static ElementShader create(String name, IntSize layoutSize, ThemeResource vertexShader, ThemeResource fragmentShader, @Nullable Path externalThemeDirectory) {
         try (var vertexShaderBuffer = vertexShader.toNativeBuffer(externalThemeDirectory);
                 var fragmentShaderBuffer = fragmentShader.toNativeBuffer(externalThemeDirectory)) {
@@ -68,7 +68,7 @@ public class ElementShader implements AutoCloseable {
             throw new RuntimeException("Failed to read shaders for " + name);
         }
     }
-    
+
     public static ElementShader create(String name, IntSize layoutSize, ByteBuffer vertexShaderSource, ByteBuffer fragmentShaderSource) {
         int vertexShader = glCreateShader(GL_VERTEX_SHADER);
         GlDebug.labelShader(vertexShader, "FML " + name + ".vert");
@@ -81,9 +81,9 @@ public class ElementShader implements AutoCloseable {
             var sourcePointers = PointerBuffer.allocateDirect(2);
             sourcePointers.put(0, stack.ASCII(layoutSizeDefineString));
             sourcePointers.put(1, fragmentShaderSource);
-            glShaderSource(fragmentShader, sourcePointers, new int[]{layoutSizeDefineString.length(), fragmentShaderSource.remaining()});
+            glShaderSource(fragmentShader, sourcePointers, new int[] { layoutSizeDefineString.length(), fragmentShaderSource.remaining() });
             sourcePointers.put(1, vertexShaderSource);
-            glShaderSource(vertexShader, sourcePointers, new int[]{layoutSizeDefineString.length(), vertexShaderSource.remaining()});
+            glShaderSource(vertexShader, sourcePointers, new int[] { layoutSizeDefineString.length(), vertexShaderSource.remaining() });
         }
 
         // Compile the vertex and fragment elementShader so that we can use them
